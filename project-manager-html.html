@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    h1 { color: #333; margin-bottom: 20px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; background: #e0e0e0; font-size: 14px; }
+    .tab.active { background: #3b82f6; color: white; }
+    .form-section { background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .form-grid input, .form-grid select { padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+    .form-grid input:focus, .form-grid select:focus { outline: none; border-color: #3b82f6; }
+    .full-width { grid-column: 1 / -1; }
+    .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+    .btn-primary { background: #10b981; color: white; }
+    .btn-primary:hover { background: #059669; }
+    .content { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+    .column { background: #f3f4f6; padding: 15px; border-radius: 8px; min-height: 300px; }
+    .column h3 { margin-bottom: 15px; color: #333; }
+    .task-card { background: white; padding: 15px; border-radius: 6px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .task-card h4 { color: #333; margin-bottom: 5px; }
+    .task-card p { color: #666; font-size: 13px; margin-bottom: 10px; }
+    .task-meta { font-size: 12px; color: #888; margin-bottom: 10px; }
+    .priority { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; margin-bottom: 10px; }
+    .priority-low { background: #dbeafe; color: #1e40af; }
+    .priority-medium { background: #fef3c7; color: #92400e; }
+    .priority-high { background: #fee2e2; color: #991b1b; }
+    .task-actions { display: flex; gap: 5px; }
+    .btn-small { padding: 5px 10px; font-size: 12px; }
+    .btn-edit { background: #3b82f6; color: white; }
+    .btn-delete { background: #ef4444; color: white; }
+    .edit-form { border: 2px solid #3b82f6; }
+    .gantt-task { margin-bottom: 20px; }
+    .gantt-bar-container { background: #e5e7eb; height: 30px; border-radius: 5px; position: relative; margin: 5px 0; }
+    .gantt-bar { background: #3b82f6; height: 100%; border-radius: 5px; color: white; display: flex; align-items: center; padding: 0 10px; font-size: 12px; position: absolute; }
+    .calendar-day { border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+    .calendar-day h3 { color: #333; margin-bottom: 10px; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Project Manager</h1>
+      
+      <div class="tabs">
+        <button class="tab active" onclick="switchView('board')">📋 Board</button>
+        <button class="tab" onclick="switchView('gantt')">📊 Gantt</button>
+        <button class="tab" onclick="switchView('calendar')">📅 Calendar</button>
+      </div>
+
+      <div class="form-section">
+        <h3>➕ Add New Task</h3>
+        <div class="form-grid">
+          <input type="text" id="taskTitle" placeholder="Task title" />
+          <select id="taskStatus">
+            <option value="todo">To Do</option>
+            <option value="inprogress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
+          <input type="text" id="taskDesc" placeholder="Description" class="full-width" />
+          <select id="taskPriority">
+            <option value="low">Low Priority</option>
+            <option value="medium">Medium Priority</option>
+            <option value="high">High Priority</option>
+          </select>
+          <input type="text" id="taskAssignee" placeholder="Assignee" />
+          <input type="date" id="taskStart" placeholder="Start Date" />
+          <input type="date" id="taskEnd" placeholder="End Date" />
+        </div>
+        <button class="btn btn-primary" onclick="addTask()">Add Task</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div id="boardView" class="board"></div>
+      <div id="ganttView" style="display:none;"></div>
+      <div id="calendarView" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    let tasks = [];
+    let currentView = 'board';
+    let editingTaskId = null;
+
+    // Load tasks from localStorage
+    function loadTasks() {
+      const saved = localStorage.getItem('project-tasks');
+      if (saved) {
+        tasks = JSON.parse(saved);
+      }
+      renderView();
+    }
+
+    // Save tasks to localStorage
+    function saveTasks() {
+      localStorage.setItem('project-tasks', JSON.stringify(tasks));
+    }
+
+    // Add new task
+    function addTask() {
+      const title = document.getElementById('taskTitle').value.trim();
+      if (!title) return alert('Please enter a task title');
+
+      const task = {
+        id: Date.now().toString(),
+        title: title,
+        description: document.getElementById('taskDesc').value,
+        status: document.getElementById('taskStatus').value,
+        priority: document.getElementById('taskPriority').value,
+        assignee: document.getElementById('taskAssignee').value,
+        startDate: document.getElementById('taskStart').value,
+        endDate: document.getElementById('taskEnd').value,
+        createdAt: new Date().toISOString()
+      };
+
+      tasks.push(task);
+      saveTasks();
+      
+      // Clear form
+      document.getElementById('taskTitle').value = '';
+      document.getElementById('taskDesc').value = '';
+      document.getElementById('taskAssignee').value = '';
+      document.getElementById('taskStart').value = '';
+      document.getElementById('taskEnd').value = '';
+      
+      renderView();
+    }
+
+    // Delete task
+    function deleteTask(id) {
+      if (confirm('Delete this task?')) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveTasks();
+        renderView();
+      }
+    }
+
+    // Start editing task
+    function editTask(id) {
+      editingTaskId = id;
+      renderView();
+    }
+
+    // Save edited task
+    function saveEdit(id) {
+      const task = tasks.find(t => t.id === id);
+      task.title = document.getElementById('edit-title-' + id).value;
+      task.description = document.getElementById('edit-desc-' + id).value;
+      task.priority = document.getElementById('edit-priority-' + id).value;
+      task.assignee = document.getElementById('edit-assignee-' + id).value;
+      task.startDate = document.getElementById('edit-start-' + id).value;
+      task.endDate = document.getElementById('edit-end-' + id).value;
+      
+      editingTaskId = null;
+      saveTasks();
+      renderView();
+    }
+
+    // Cancel editing
+    function cancelEdit() {
+      editingTaskId = null;
+      renderView();
+    }
+
+    // Render task card
+    function renderTaskCard(task) {
+      const priorityClass = 'priority-' + task.priority;
+      
+      if (editingTaskId === task.id) {
+        return `
+          <div class="task-card edit-form">
+            <input type="text" id="edit-title-${task.id}" value="${task.title}" style="width:100%;padding:8px;margin-bottom:5px;border:1px solid #ddd;border-radius:4px;" />
+            <input type="text" id="edit-desc-${task.id}" value="${task.description}" placeholder="Description" style="width:100%;padding:8px;margin-bottom:5px;border:1px solid #ddd;border-radius:4px;" />
+            <select id="edit-priority-${task.id}" style="width:100%;padding:8px;margin-bottom:5px;border:1px solid #ddd;border-radius:4px;">
+              <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+              <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Medium</option>
+              <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+            </select>
+            <input type="text" id="edit-assignee-${task.id}" value="${task.assignee}" placeholder="Assignee" style="width:100%;padding:8px;margin-bottom:5px;border:1px solid #ddd;border-radius:4px;" />
+            <input type="date" id="edit-start-${task.id}" value="${task.startDate}" style="width:48%;padding:8px;margin-bottom:5px;border:1px solid #ddd;border-radius:4px;" />
+            <input type="date" id="edit-end-${task.id}" value="${task.endDate}" style="width:48%;padding:8px;margin-left:4%;border:1px solid #ddd;border-radius:4px;" />
+            <div class="task-actions" style="margin-top:10px;">
+              <button class="btn btn-small" style="background:#10b981;color:white;" onclick="saveEdit('${task.id}')">Save</button>
+              <button class="btn btn-small" style="background:#6b7280;color:white;" onclick="cancelEdit()">Cancel</button>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="task-card">
+          <span class="priority ${priorityClass}">${task.priority}</span>
+          <h4>${task.title}</h4>
+          ${task.description ? `<p>${task.description}</p>` : ''}
+          <div class="task-meta">
+            ${task.assignee ? `👤 ${task.assignee}` : ''} 
+            ${task.endDate ? `📅 ${task.endDate}` : ''}
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-small btn-edit" onclick="editTask('${task.id}')">Edit</button>
+            <button class="btn btn-small btn-delete" onclick="deleteTask('${task.id}')">Delete</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render Board View
+    function renderBoard() {
+      const todo = tasks.filter(t => t.status === 'todo');
+      const inprogress = tasks.filter(t => t.status === 'inprogress');
+      const done = tasks.filter(t => t.status === 'done');
+
+      document.getElementById('boardView').innerHTML = `
+        <div class="column">
+          <h3>To Do</h3>
+          ${todo.map(renderTaskCard).join('')}
+        </div>
+        <div class="column">
+          <h3>In Progress</h3>
+          ${inprogress.map(renderTaskCard).join('')}
+        </div>
+        <div class="column">
+          <h3>Done</h3>
+          ${done.map(renderTaskCard).join('')}
+        </div>
+      `;
+    }
+
+    // Render Gantt View
+    function renderGantt() {
+      const tasksWithDates = tasks.filter(t => t.startDate && t.endDate);
+      
+      if (tasksWithDates.length === 0) {
+        document.getElementById('ganttView').innerHTML = '<div class="empty-state">No tasks with start and end dates. Add dates to see Gantt chart.</div>';
+        return;
+      }
+
+      const allDates = tasksWithDates.flatMap(t => [new Date(t.startDate), new Date(t.endDate)]);
+      const minDate = new Date(Math.min(...allDates));
+      const maxDate = new Date(Math.max(...allDates));
+      const daysDiff = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
+
+      const ganttHTML = tasksWithDates.map(task => {
+        const start = new Date(task.startDate);
+        const end = new Date(task.endDate);
+        const startOffset = Math.ceil((start - minDate) / (1000 * 60 * 60 * 24));
+        const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        const width = (duration / daysDiff) * 100;
+        const left = (startOffset / daysDiff) * 100;
+
+        return `
+          <div class="gantt-task">
+            <strong>${task.title}</strong>
+            <div class="gantt-bar-container">
+              <div class="gantt-bar" style="left:${left}%;width:${width}%;">
+                ${task.assignee || 'Unassigned'}
+              </div>
+            </div>
+            <small style="color:#888;">${task.startDate} → ${task.endDate}</small>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('ganttView').innerHTML = ganttHTML;
+    }
+
+    // Render Calendar View
+    function renderCalendar() {
+      const tasksWithDates = tasks.filter(t => t.endDate || t.startDate);
+      
+      if (tasksWithDates.length === 0) {
+        document.getElementById('calendarView').innerHTML = '<div class="empty-state">No tasks with dates. Add dates to see calendar view.</div>';
+        return;
+      }
+
+      const grouped = {};
+      tasksWithDates.forEach(task => {
+        const date = task.endDate || task.startDate;
+        if (!grouped[date]) grouped[date] = [];
+        grouped[date].push(task);
+      });
+
+      const calendarHTML = Object.keys(grouped).sort().map(date => {
+        const dateObj = new Date(date);
+        const formatted = dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        
+        return `
+          <div class="calendar-day">
+            <h3>${formatted}</h3>
+            ${grouped[date].map(renderTaskCard).join('')}
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('calendarView').innerHTML = calendarHTML;
+    }
+
+    // Switch view
+    function switchView(view) {
+      currentView = view;
+      
+      // Update tabs
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      // Hide all views
+      document.getElementById('boardView').style.display = 'none';
+      document.getElementById('ganttView').style.display = 'none';
+      document.getElementById('calendarView').style.display = 'none';
+      
+      // Show current view
+      if (view === 'board') {
+        document.getElementById('boardView').style.display = 'grid';
+      } else if (view === 'gantt') {
+        document.getElementById('ganttView').style.display = 'block';
+      } else {
+        document.getElementById('calendarView').style.display = 'block';
+      }
+      
+      renderView();
+    }
+
+    // Render current view
+    function renderView() {
+      if (currentView === 'board') renderBoard();
+      else if (currentView === 'gantt') renderGantt();
+      else renderCalendar();
+    }
+
+    // Initialize
+    loadTasks();
+  </script>
+</body>
+</html>
