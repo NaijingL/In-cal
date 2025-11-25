@@ -1,0 +1,411 @@
+import React, { useState, useEffect } from 'react';
+import { Calendar, CheckSquare, BarChart3, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+
+const ProjectManager = () => {
+  const [view, setView] = useState('board');
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingTask, setEditingTask] = useState(null);
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    status: 'todo',
+    priority: 'medium',
+    assignee: '',
+    startDate: '',
+    endDate: '',
+    dueDate: ''
+  });
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  const loadTasks = async () => {
+    try {
+      const result = await window.storage.get('project-tasks', true);
+      if (result) {
+        setTasks(JSON.parse(result.value));
+      }
+    } catch (error) {
+      console.log('No tasks found, starting fresh');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveTasks = async (updatedTasks) => {
+    try {
+      await window.storage.set('project-tasks', JSON.stringify(updatedTasks), true);
+      setTasks(updatedTasks);
+    } catch (error) {
+      console.error('Error saving tasks:', error);
+      alert('Failed to save tasks');
+    }
+  };
+
+  const addTask = async () => {
+    if (!newTask.title.trim()) return;
+    
+    const task = {
+      ...newTask,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    
+    await saveTasks([...tasks, task]);
+    setNewTask({
+      title: '',
+      description: '',
+      status: 'todo',
+      priority: 'medium',
+      assignee: '',
+      startDate: '',
+      endDate: '',
+      dueDate: ''
+    });
+  };
+
+  const updateTask = async (id, updates) => {
+    const updatedTasks = tasks.map(t => t.id === id ? { ...t, ...updates } : t);
+    await saveTasks(updatedTasks);
+    setEditingTask(null);
+  };
+
+  const deleteTask = async (id) => {
+    if (confirm('Delete this task?')) {
+      await saveTasks(tasks.filter(t => t.id !== id));
+    }
+  };
+
+  const moveTask = async (id, newStatus) => {
+    await updateTask(id, { status: newStatus });
+  };
+
+  const TaskCard = ({ task }) => {
+    const priorityColors = {
+      low: 'bg-blue-100 text-blue-800',
+      medium: 'bg-yellow-100 text-yellow-800',
+      high: 'bg-red-100 text-red-800'
+    };
+
+    if (editingTask?.id === task.id) {
+      return (
+        <div className="bg-white p-4 rounded-lg shadow mb-3 border-2 border-blue-500">
+          <input
+            type="text"
+            value={editingTask.title}
+            onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+            className="w-full p-2 border rounded mb-2 font-semibold"
+          />
+          <textarea
+            value={editingTask.description}
+            onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+            className="w-full p-2 border rounded mb-2 text-sm"
+            rows="2"
+          />
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <select
+              value={editingTask.priority}
+              onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
+              className="p-2 border rounded text-sm"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Assignee"
+              value={editingTask.assignee}
+              onChange={(e) => setEditingTask({ ...editingTask, assignee: e.target.value })}
+              className="p-2 border rounded text-sm"
+            />
+            <input
+              type="date"
+              value={editingTask.startDate}
+              onChange={(e) => setEditingTask({ ...editingTask, startDate: e.target.value })}
+              className="p-2 border rounded text-sm"
+            />
+            <input
+              type="date"
+              value={editingTask.endDate}
+              onChange={(e) => setEditingTask({ ...editingTask, endDate: e.target.value })}
+              className="p-2 border rounded text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => updateTask(task.id, editingTask)}
+              className="flex-1 bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 flex items-center justify-center gap-1"
+            >
+              <Save size={16} /> Save
+            </button>
+            <button
+              onClick={() => setEditingTask(null)}
+              className="flex-1 bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 flex items-center justify-center gap-1"
+            >
+              <X size={16} /> Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white p-4 rounded-lg shadow mb-3 hover:shadow-md transition-shadow">
+        <div className="flex justify-between items-start mb-2">
+          <h4 className="font-semibold text-gray-800">{task.title}</h4>
+          <span className={`px-2 py-1 rounded text-xs ${priorityColors[task.priority]}`}>
+            {task.priority}
+          </span>
+        </div>
+        {task.description && (
+          <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+        )}
+        <div className="flex flex-wrap gap-2 mb-3 text-xs text-gray-500">
+          {task.assignee && <span>👤 {task.assignee}</span>}
+          {task.dueDate && <span>📅 {task.dueDate}</span>}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setEditingTask(task)}
+            className="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600 flex items-center justify-center gap-1"
+          >
+            <Edit2 size={14} /> Edit
+          </button>
+          <button
+            onClick={() => deleteTask(task.id)}
+            className="bg-red-500 text-white px-2 py-1 rounded text-sm hover:bg-red-600"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const BoardView = () => {
+    const columns = {
+      todo: { title: 'To Do', color: 'bg-gray-100' },
+      inprogress: { title: 'In Progress', color: 'bg-blue-100' },
+      done: { title: 'Done', color: 'bg-green-100' }
+    };
+
+    return (
+      <div className="grid grid-cols-3 gap-4">
+        {Object.entries(columns).map(([status, { title, color }]) => (
+          <div key={status} className={`${color} p-4 rounded-lg`}>
+            <h3 className="font-bold mb-4 text-lg">{title}</h3>
+            <div className="space-y-2">
+              {tasks.filter(t => t.status === status).map(task => (
+                <TaskCard key={task.id} task={task} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const GanttView = () => {
+    const tasksWithDates = tasks.filter(t => t.startDate && t.endDate);
+    
+    if (tasksWithDates.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500">
+          No tasks with start and end dates. Add dates to tasks to see them in Gantt view.
+        </div>
+      );
+    }
+
+    const allDates = tasksWithDates.flatMap(t => [new Date(t.startDate), new Date(t.endDate)]);
+    const minDate = new Date(Math.min(...allDates));
+    const maxDate = new Date(Math.max(...allDates));
+    const daysDiff = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
+
+    return (
+      <div className="overflow-x-auto">
+        <div className="min-w-full">
+          {tasksWithDates.map(task => {
+            const start = new Date(task.startDate);
+            const end = new Date(task.endDate);
+            const startOffset = Math.ceil((start - minDate) / (1000 * 60 * 60 * 24));
+            const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            const width = (duration / daysDiff) * 100;
+            const left = (startOffset / daysDiff) * 100;
+
+            return (
+              <div key={task.id} className="mb-4">
+                <div className="font-semibold mb-1 text-sm">{task.title}</div>
+                <div className="relative bg-gray-200 h-8 rounded">
+                  <div
+                    className="absolute bg-blue-500 h-full rounded flex items-center px-2 text-white text-xs"
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                  >
+                    {task.assignee || 'Unassigned'}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {task.startDate} → {task.endDate}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const CalendarView = () => {
+    const tasksWithDates = tasks.filter(t => t.dueDate || t.startDate || t.endDate);
+    
+    if (tasksWithDates.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500">
+          No tasks with dates. Add dates to tasks to see them in calendar view.
+        </div>
+      );
+    }
+
+    const groupedByDate = tasksWithDates.reduce((acc, task) => {
+      const date = task.dueDate || task.endDate || task.startDate;
+      if (!acc[date]) acc[date] = [];
+      acc[date].push(task);
+      return acc;
+    }, {});
+
+    return (
+      <div className="space-y-4">
+        {Object.entries(groupedByDate).sort().map(([date, dateTasks]) => (
+          <div key={date} className="border rounded-lg p-4">
+            <h3 className="font-bold mb-3 text-lg">{new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+            <div className="space-y-2">
+              {dateTasks.map(task => (
+                <TaskCard key={task.id} task={task} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-xl">Loading tasks...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h1 className="text-3xl font-bold mb-6 text-gray-800">Project Manager</h1>
+          
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setView('board')}
+              className={`flex items-center gap-2 px-4 py-2 rounded ${view === 'board' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              <CheckSquare size={20} /> Board
+            </button>
+            <button
+              onClick={() => setView('gantt')}
+              className={`flex items-center gap-2 px-4 py-2 rounded ${view === 'gantt' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              <BarChart3 size={20} /> Gantt
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`flex items-center gap-2 px-4 py-2 rounded ${view === 'calendar' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              <Calendar size={20} /> Calendar
+            </button>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg mb-6">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Plus size={20} /> Add New Task
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="Task title"
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                className="p-2 border rounded"
+              />
+              <select
+                value={newTask.status}
+                onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+                className="p-2 border rounded"
+              >
+                <option value="todo">To Do</option>
+                <option value="inprogress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Description"
+                value={newTask.description}
+                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                className="p-2 border rounded col-span-2"
+              />
+              <select
+                value={newTask.priority}
+                onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
+                className="p-2 border rounded"
+              >
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Assignee"
+                value={newTask.assignee}
+                onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
+                className="p-2 border rounded"
+              />
+              <input
+                type="date"
+                placeholder="Start Date"
+                value={newTask.startDate}
+                onChange={(e) => setNewTask({ ...newTask, startDate: e.target.value })}
+                className="p-2 border rounded"
+              />
+              <input
+                type="date"
+                placeholder="End Date"
+                value={newTask.endDate}
+                onChange={(e) => setNewTask({ ...newTask, endDate: e.target.value, dueDate: e.target.value })}
+                className="p-2 border rounded"
+              />
+            </div>
+            <button
+              onClick={addTask}
+              className="mt-3 bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 flex items-center gap-2"
+            >
+              <Plus size={20} /> Add Task
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          {view === 'board' && <BoardView />}
+          {view === 'gantt' && <GanttView />}
+          {view === 'calendar' && <CalendarView />}
+        </div>
+
+        <div className="mt-4 text-center text-sm text-gray-500">
+          ℹ️ This is a shared workspace - all changes are visible to both users
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProjectManager;
